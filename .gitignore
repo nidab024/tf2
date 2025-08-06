@@ -4,3 +4,5 @@ terraform.exe
 terraform.tfstate
 .terraform.lock.hcl
 .terraform/
+terraform.tfstate.backup
+terraform.tfstate.*
