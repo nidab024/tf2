@@ -3,8 +3,8 @@ pipeline {
     
     environment {
         // Option 1: Use separate AWS credentials
-        AWS_ACCESS_KEY_ID = AKIA4SZHNQDR5VULV47C
-        AWS_SECRET_ACCESS_KEY = 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
+        //AWS_ACCESS_KEY_ID = 
+        //AWS_SECRET_ACCESS_KEY = 
         
         // Option 2: Use AWS Credentials plugin (recommended)
         // AWS_CREDENTIALS = credentials('aws-credentials')
