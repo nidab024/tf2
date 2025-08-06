@@ -2,17 +2,7 @@ pipeline {
     agent any
     
     environment {
-        // Option 1: Use separate AWS credentials
-        //AWS_ACCESS_KEY_ID = 
-        //AWS_SECRET_ACCESS_KEY = 
-        
-        // Option 2: Use AWS Credentials plugin (recommended)
-        // AWS_CREDENTIALS = credentials('aws-credentials')
-        
-        // Option 3: Use IAM Role (best practice for EC2)
-        // No credentials needed - uses instance role
-        
-        // Terraform version
+       
         TERRAFORM_VERSION = '1.5.0'
         // Working directory for Terraform files
         TF_WORKSPACE = 'tf2'
