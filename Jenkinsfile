@@ -2,10 +2,11 @@ pipeline {
     agent any
     
     environment {
-       
+        // AWS region to deploy to
+        AWS_DEFAULT_REGION = 'ap-south-1'
         TERRAFORM_VERSION = '1.5.0'
-        // Working directory for Terraform files
-        TF_WORKSPACE = 'tf2'
+        // Working directory for Terraform files - should be '.' for root directory
+        TF_WORKSPACE = '.'
     }
     
     parameters {
@@ -25,7 +26,9 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo 'Checking out source code...'
-                checkout scm
+                // Checkout the specific repository
+                git branch: 'main', 
+                    url: 'https://github.com/nidab024/tf2.git'
             }
         }
         
@@ -35,7 +38,8 @@ pipeline {
                     echo 'Testing AWS credentials...'
                     sh '''
                         aws sts get-caller-identity
-                        aws ec2 describe-regions --region ap-south-1
+                        aws ec2 describe-regions --region $AWS_DEFAULT_REGION --output table
+                        echo "AWS credentials are working correctly!"
                     '''
                 }
             }
@@ -93,6 +97,31 @@ pipeline {
                         sh '''
                             terraform fmt -check=true -diff=true -no-color
                         '''
+                    }
+                }
+            }
+        }
+        
+        stage('Terraform Security Scan') {
+            steps {
+                dir("${TF_WORKSPACE}") {
+                    script {
+                        echo 'Running Terraform security scan...'
+                        sh '''
+                            # Install tfsec if not available
+                            if ! command -v tfsec &> /dev/null; then
+                                echo "Installing tfsec..."
+                                curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+                                sudo mv tfsec /usr/local/bin/
+                            fi
+                            
+                            # Run security scan
+                            tfsec . --format json --out tfsec-results.json || true
+                            tfsec . --format default || true
+                        '''
+                        
+                        // Archive security scan results
+                        archiveArtifacts artifacts: 'tfsec-results.json', allowEmptyArchive: true
                     }
                 }
             }
@@ -189,17 +218,23 @@ pipeline {
         
         stage('Terraform Output') {
             when {
-                anyOf {
-                    params.ACTION == 'apply'
-                }
+                params.ACTION == 'apply'
             }
             steps {
                 dir("${TF_WORKSPACE}") {
                     script {
                         echo 'Displaying Terraform outputs...'
                         sh '''
-                            terraform output -no-color
+                            echo "=== Terraform State Summary ==="
+                            terraform show -no-color
+                            echo ""
+                            echo "=== Terraform Outputs ==="
+                            terraform output -no-color -json > terraform-outputs.json || echo "No outputs defined"
+                            terraform output -no-color || echo "No outputs defined"
                         '''
+                        
+                        // Archive outputs
+                        archiveArtifacts artifacts: 'terraform-outputs.json', allowEmptyArchive: true
                     }
                 }
             }
@@ -209,15 +244,29 @@ pipeline {
     post {
         always {
             echo 'Cleaning up workspace...'
-            cleanWs()
+            // Archive Terraform state files for backup
+            archiveArtifacts artifacts: 'terraform.tfstate*', allowEmptyArchive: true
+            // Clean workspace but preserve .terraform directory for faster subsequent runs
+            sh 'find . -name "*.tfplan" -delete || true'
+            sh 'find . -name "tfdestroy" -delete || true'
         }
         success {
             echo 'Pipeline completed successfully!'
-            // You can add notifications here (Slack, email, etc.)
+            // Send success notification
+            emailext (
+                subject: "✅ Terraform Deployment Success - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "Terraform ${params.ACTION} completed successfully for ${env.JOB_NAME} build #${env.BUILD_NUMBER}",
+                to: "${env.CHANGE_AUTHOR_EMAIL ?: env.BUILD_USER_EMAIL ?: 'admin@company.com'}"
+            )
         }
         failure {
             echo 'Pipeline failed!'
-            // You can add failure notifications here
+            // Send failure notification
+            emailext (
+                subject: "❌ Terraform Deployment Failed - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "Terraform ${params.ACTION} failed for ${env.JOB_NAME} build #${env.BUILD_NUMBER}. Please check the console output.",
+                to: "${env.CHANGE_AUTHOR_EMAIL ?: env.BUILD_USER_EMAIL ?: 'admin@company.com'}"
+            )
         }
     }
 }
