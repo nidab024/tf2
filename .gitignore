@@ -1,0 +1,6 @@
+# Ignore license and executable files
+LICENSE.txt
+terraform.exe
+terraform.tfstate
+.terraform.lock.hcl
+.terraform/
